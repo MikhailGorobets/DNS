@@ -16,7 +16,7 @@ set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS ON)
 
 
-find_package(Boost 1.76.0 REQUIRED COMPONENTS serialization filesystem date_time)
+find_package(Boost 1.73.0 REQUIRED COMPONENTS serialization filesystem date_time)
 if(NOT Boost_FOUND)
 	message(SEND_ERROR "Failed to find boost")
 	return()
