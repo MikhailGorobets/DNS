@@ -1,0 +1,25 @@
+name: Windows
+
+on: [push, pull_request]
+
+jobs:
+  build-win10:
+    strategy:
+      matrix:
+        toolset: [x64]
+        config: [Release]
+        
+    runs-on: windows-latest    
+    name: Windows 10, ${{ matrix.config }} ${{ matrix.toolset }}
+    
+    steps:
+    - name: Clone repository
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    
+    - name: Configure CMake
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.config}}
+      
+    - name: Build  
+      run: cmake --build ${{github.workspace}}/build --config ${{matrix.config}}  
