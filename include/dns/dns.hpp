@@ -5,7 +5,6 @@
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/xml_iarchive.hpp>
 #include <boost/archive/xml_oarchive.hpp>
-#include "dns_detail.hpp"
 #include <fmt/printf.h>
 #include <fmt/ostream.h>
 
@@ -61,35 +60,35 @@ namespace DNS {
     };
 #pragma pack(pop)
 
-	struct Query {
-		Name     Name = {};
-		Question Question = {};
-	};
+    struct Query {
+        Name     Name = {};
+        Question Question = {};
+    };
 
-	struct ResourceRecord {
-		Name   Name = {};
-		Answer Answer = {};
-		Data   Data = {};	
-	};
+    struct ResourceRecord {
+        Name   Name = {};
+        Answer Answer = {};
+        Data   Data = {};
+    };
 
     struct Package {
-		DNS::Header Header = {};
-		std::vector<DNS::Query>          Questions = {};
-		std::vector<DNS::ResourceRecord> Answers   = {};
-		std::vector<DNS::ResourceRecord> Authoritys = {};
-		std::vector<DNS::ResourceRecord> Additional = {};
-	};
-    
+        DNS::Header Header = {};
+        std::vector<DNS::Query>          Questions = {};
+        std::vector<DNS::ResourceRecord> Answers = {};
+        std::vector<DNS::ResourceRecord> Authoritys = {};
+        std::vector<DNS::ResourceRecord> Additional = {};
+    };
+
     template <typename T>
     auto SwapEndian(T value) noexcept -> T;
 
     auto ParseName(const uint8_t* pData) noexcept -> std::string;
 
-    auto CreatePackageFromBuffer(std::vector<uint8_t> const& buffer )-> Package;
+    auto CreatePackageFromBuffer(std::vector<uint8_t> const& buffer)->Package;
 
-    auto CreateBufferFromPackage(Package const& package) -> std::vector<uint8_t>;
+    auto CreateBufferFromPackage(Package const& package)->std::vector<uint8_t>;
 
-    auto ComputeSize(Package const& package )-> std::size_t;
+    auto ComputeSize(Package const& package)->std::size_t;
 
     template<typename Archive>
     auto Serialize(Archive& arhive, Question const& question, uint32_t version) -> void {
@@ -117,37 +116,37 @@ namespace DNS {
 
     template<typename Archive>
     auto Serialize(Archive& archive, Query const& query, uint32_t version) -> void {
-        archive & BOOST_SERIALIZATION_NVP(query.Name);
-        archive & BOOST_SERIALIZATION_NVP(query.Question);
+        archive& BOOST_SERIALIZATION_NVP(query.Name);
+        archive& BOOST_SERIALIZATION_NVP(query.Question);
     }
 
     template<typename Archive>
     auto Serialize(Archive& archive, ResourceRecord const& record, uint32_t version) -> void {
-        archive & BOOST_SERIALIZATION_NVP(record.Name);
-        archive & BOOST_SERIALIZATION_NVP(record.Answer);
-        archive & BOOST_SERIALIZATION_NVP(record.Data);
+        archive& BOOST_SERIALIZATION_NVP(record.Name);
+        archive& BOOST_SERIALIZATION_NVP(record.Answer);
+        archive& BOOST_SERIALIZATION_NVP(record.Data);
     }
 
     template<typename Archive>
     auto Serialize(Archive& archive, Package const& package, uint32_t version) -> void {
-        archive & BOOST_SERIALIZATION_NVP(package.Header);
-        archive & BOOST_SERIALIZATION_NVP(package.Questions);
-        archive & BOOST_SERIALIZATION_NVP(package.Answers);
-        archive & BOOST_SERIALIZATION_NVP(package.Authoritys);
-        archive & BOOST_SERIALIZATION_NVP(package.Additional);
+        archive& BOOST_SERIALIZATION_NVP(package.Header);
+        archive& BOOST_SERIALIZATION_NVP(package.Questions);
+        archive& BOOST_SERIALIZATION_NVP(package.Answers);
+        archive& BOOST_SERIALIZATION_NVP(package.Authoritys);
+        archive& BOOST_SERIALIZATION_NVP(package.Additional);
     }
-    
+
     std::ostream& operator<<(std::ostream& os, Header const& header);
 
     std::ostream& operator<<(std::ostream& os, Answer const& answer);
 
     std::ostream& operator<<(std::ostream& os, Question const& question);
 
-	std::ostream& operator<<(std::ostream& os, Query const& query);
+    std::ostream& operator<<(std::ostream& os, Query const& query);
 
-	std::ostream& operator<<(std::ostream& os, ResourceRecord const& record);
+    std::ostream& operator<<(std::ostream& os, ResourceRecord const& record);
 
-	std::ostream& operator<<(std::ostream& os, Package const& query);
+    std::ostream& operator<<(std::ostream& os, Package const& query);
 }
 
 
@@ -185,18 +184,18 @@ namespace DNS {
         return os;
     }
 
-	inline std::ostream& operator<<(std::ostream& os, Query const& query) {
-		os << "Name: " << query.Name.c_str() << std::endl;
-		os << query.Question << std::endl;
-		return os;
-	}
+    inline std::ostream& operator<<(std::ostream& os, Query const& query) {
+        os << "Name: " << query.Name.c_str() << std::endl;
+        os << query.Question << std::endl;
+        return os;
+    }
 
-	inline std::ostream& operator<<(std::ostream& os, ResourceRecord const& record) {
-		os << "Name: " << record.Name.c_str() << std::endl;
-		os << record.Answer << std::endl;
-		os << "Data: " << record.Data.c_str() << std::endl;
-		return os;
-	}
+    inline std::ostream& operator<<(std::ostream& os, ResourceRecord const& record) {
+        os << "Name: " << record.Name.c_str() << std::endl;
+        os << record.Answer << std::endl;
+        os << "Data: " << record.Data.c_str() << std::endl;
+        return os;
+    }
 
     inline std::ostream& operator<<(std::ostream& os, Package const& package) {
         os << "DNS package:" << std::endl;
@@ -250,112 +249,112 @@ namespace DNS {
         return std::string(pData, pData + size + 2);
     }
 
-	[[nodiscard]] inline auto CreatePackageFromBuffer(std::vector<uint8_t> const& buffer) -> Package {
-		size_t offset = 0;
-		Package package = {};
-		std::memcpy(&package.Header, buffer.data(), sizeof(DNS::Header));
-		offset += sizeof(DNS::Header);
-		auto LoadQuery = [&](std::vector<DNS::Query> & quries) {
-			DNS::Query query = {};
-			query.Name = DNS::ParseName(buffer.data() + offset);
-			offset += query.Name.size();
-			std::memcpy(&query.Question, buffer.data() + offset, sizeof(DNS::Question));
-			offset += sizeof(DNS::Question);
-			quries.push_back(std::move(query));
-		};
-        
-		auto LoadResource = [&](std::vector<DNS::ResourceRecord> & resources) {
-			DNS::ResourceRecord resource = {};
-			resource.Name = DNS::ParseName(buffer.data() + offset);
-			offset += resource.Name.size();
-			std::memcpy(&resource.Answer, buffer.data() + offset, sizeof(DNS::Answer));
-			offset += sizeof(DNS::Answer);
+    [[nodiscard]] inline auto CreatePackageFromBuffer(std::vector<uint8_t> const& buffer) -> Package {
+        size_t offset = 0;
+        Package package = {};
+        std::memcpy(&package.Header, buffer.data(), sizeof(DNS::Header));
+        offset += sizeof(DNS::Header);
+        auto LoadQuery = [&](std::vector<DNS::Query>& quries) {
+            DNS::Query query = {};
+            query.Name = DNS::ParseName(buffer.data() + offset);
+            offset += query.Name.size();
+            std::memcpy(&query.Question, buffer.data() + offset, sizeof(DNS::Question));
+            offset += sizeof(DNS::Question);
+            quries.push_back(std::move(query));
+        };
+
+        auto LoadResource = [&](std::vector<DNS::ResourceRecord>& resources) {
+            DNS::ResourceRecord resource = {};
+            resource.Name = DNS::ParseName(buffer.data() + offset);
+            offset += resource.Name.size();
+            std::memcpy(&resource.Answer, buffer.data() + offset, sizeof(DNS::Answer));
+            offset += sizeof(DNS::Answer);
             resource.Data.resize(DNS::SwapEndian<uint16_t>(resource.Answer.DataLenght));
             std::memcpy(const_cast<char*>(resource.Data.data()), buffer.data() + offset, DNS::SwapEndian<uint16_t>(resource.Answer.DataLenght));
-			offset += DNS::SwapEndian<uint16_t>(resource.Answer.DataLenght);
-			resources.push_back(std::move(resource));
-		};
-        
-		for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountQuestion); index++)
-			LoadQuery(package.Questions);
-        
-		for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountAnswer); index++)
-			LoadResource(package.Answers);
-        
-		for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountAuthority); index++)
-			LoadResource(package.Authoritys);
-        
-		for (size_t index = 0; index <  DNS::SwapEndian(package.Header.CountAdditional); index++)
-			LoadResource(package.Additional);
-        
-		return package;
-	}
+            offset += DNS::SwapEndian<uint16_t>(resource.Answer.DataLenght);
+            resources.push_back(std::move(resource));
+        };
 
-	[[nodiscard]] inline auto CreateBufferFromPackage(Package const & package) -> std::vector<uint8_t> {
-		uint16_t offset = 0;
+        for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountQuestion); index++)
+            LoadQuery(package.Questions);
+
+        for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountAnswer); index++)
+            LoadResource(package.Answers);
+
+        for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountAuthority); index++)
+            LoadResource(package.Authoritys);
+
+        for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountAdditional); index++)
+            LoadResource(package.Additional);
+
+        return package;
+    }
+
+    [[nodiscard]] inline auto CreateBufferFromPackage(Package const& package) -> std::vector<uint8_t> {
+        uint16_t offset = 0;
         std::vector<uint8_t> buffer(PACKAGE_SIZE);
-		std::memcpy(buffer.data(), &package.Header, sizeof(DNS::Header));
-		offset += sizeof(DNS::Header);
+        std::memcpy(buffer.data(), &package.Header, sizeof(DNS::Header));
+        offset += sizeof(DNS::Header);
 
-		auto SaveQuery = [&](DNS::Query const& query) {
-			std::memcpy(buffer.data() + offset, query.Name.data(), query.Name.size());
-			offset += static_cast<uint16_t>(query.Name.size());
-			std::memcpy(buffer.data() + offset, &query.Question, sizeof(DNS::Question));
-			offset += sizeof(DNS::Question);
-		};
+        auto SaveQuery = [&](DNS::Query const& query) {
+            std::memcpy(buffer.data() + offset, query.Name.data(), query.Name.size());
+            offset += static_cast<uint16_t>(query.Name.size());
+            std::memcpy(buffer.data() + offset, &query.Question, sizeof(DNS::Question));
+            offset += sizeof(DNS::Question);
+        };
 
-		auto SaveResource = [&](DNS::ResourceRecord const& resource) {
-			std::memcpy(buffer.data() + offset, resource.Name.data(), resource.Name.size());
-			offset += static_cast<uint16_t>(resource.Name.size());
-			std::memcpy(buffer.data() + offset, &resource.Answer, sizeof(DNS::Answer));
-			offset += sizeof(DNS::Answer);
-			std::memcpy(buffer.data() + offset, resource.Data.data(), DNS::SwapEndian(resource.Answer.DataLenght));
-			offset += DNS::SwapEndian(resource.Answer.DataLenght);
-		};
+        auto SaveResource = [&](DNS::ResourceRecord const& resource) {
+            std::memcpy(buffer.data() + offset, resource.Name.data(), resource.Name.size());
+            offset += static_cast<uint16_t>(resource.Name.size());
+            std::memcpy(buffer.data() + offset, &resource.Answer, sizeof(DNS::Answer));
+            offset += sizeof(DNS::Answer);
+            std::memcpy(buffer.data() + offset, resource.Data.data(), DNS::SwapEndian(resource.Answer.DataLenght));
+            offset += DNS::SwapEndian(resource.Answer.DataLenght);
+        };
 
-		for (size_t index = 0; index <  DNS::SwapEndian(package.Header.CountQuestion); index++)
-			SaveQuery(package.Questions[index]);
+        for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountQuestion); index++)
+            SaveQuery(package.Questions[index]);
 
-		for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountAnswer); index++)
-			SaveResource(package.Answers[index]);
+        for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountAnswer); index++)
+            SaveResource(package.Answers[index]);
 
-		for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountAuthority); index++)
-			SaveResource(package.Authoritys[index]);
+        for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountAuthority); index++)
+            SaveResource(package.Authoritys[index]);
 
-		for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountAdditional); index++)
-			SaveResource(package.Additional[index]);
+        for (size_t index = 0; index < DNS::SwapEndian(package.Header.CountAdditional); index++)
+            SaveResource(package.Additional[index]);
 
         buffer.resize(offset);
-		return buffer;
-	}
+        return buffer;
+    }
 
-    [[nodiscard]] inline auto ComputeSize(Package const & package) -> std::size_t {
-		std::size_t size = 0;
-		size += sizeof(package.Header);
+    [[nodiscard]] inline auto ComputeSize(Package const& package) -> std::size_t {
+        std::size_t size = 0;
+        size += sizeof(package.Header);
 
-		auto ComputeSizeQuery = [&](DNS::Query const& e) -> void {
-			size += e.Name.size(); 
-			size += sizeof(DNS::Question);
-		};
+        auto ComputeSizeQuery = [&](DNS::Query const& e) -> void {
+            size += e.Name.size();
+            size += sizeof(DNS::Question);
+        };
 
-		auto ComputeSizeResource = [&](DNS::ResourceRecord const& e) -> void {
-			size += e.Name.size();
-			size += sizeof(DNS::Answer);
-			size += e.Data.size();
-		};
+        auto ComputeSizeResource = [&](DNS::ResourceRecord const& e) -> void {
+            size += e.Name.size();
+            size += sizeof(DNS::Answer);
+            size += e.Data.size();
+        };
 
-		for (auto const& e : package.Questions)
-			ComputeSizeQuery(e);
+        for (auto const& e : package.Questions)
+            ComputeSizeQuery(e);
 
-		for (auto const& e : package.Answers)
-			ComputeSizeResource(e);
+        for (auto const& e : package.Answers)
+            ComputeSizeResource(e);
 
-		for (auto const& e : package.Authoritys)
-			ComputeSizeResource(e);
+        for (auto const& e : package.Authoritys)
+            ComputeSizeResource(e);
 
-		for (auto const& e : package.Additional)
-			ComputeSizeResource(e);
+        for (auto const& e : package.Additional)
+            ComputeSizeResource(e);
 
-		return size;
-	}
+        return size;
+    }
 }
