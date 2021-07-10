@@ -1,17 +1,19 @@
 #pragma once
 
 #include <array>
+#include <span>
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/xml_iarchive.hpp>
 #include <boost/archive/xml_oarchive.hpp>
+#include <boost/endian.hpp>
 #include <fmt/printf.h>
 #include <fmt/ostream.h>
 
 
 namespace DNS {
 
-    constexpr std::size_t PACKAGE_SIZE = 4096;
+    constexpr std::size_t PACKAGE_SIZE = 1024;
 
     using Name = std::string;
     using Data = std::string;
@@ -84,11 +86,11 @@ namespace DNS {
 
     auto ParseName(const uint8_t* pData) noexcept -> std::string;
 
-    auto CreatePackageFromBuffer(std::vector<uint8_t> const& buffer)->Package;
+    auto CreatePackageFromBuffer(std::span<const uint8_t> buffer) -> Package;
 
-    auto CreateBufferFromPackage(Package const& package)->std::vector<uint8_t>;
+    auto CreateBufferFromPackage(Package const& package) -> std::vector<uint8_t>;
 
-    auto ComputeSize(Package const& package)->std::size_t;
+    auto ComputeSize(Package const& package) -> size_t;
 
     template<typename Archive>
     auto Serialize(Archive& arhive, Question const& question, uint32_t version) -> void {
@@ -153,91 +155,86 @@ namespace DNS {
 namespace DNS {
 
     inline std::ostream& operator<<(std::ostream& os, Header const& header) {
-        os << "ID: " << SwapEndian<uint16_t>(header.ID) << std::endl;
-        os << "RecursionDesired: " << static_cast<bool>(header.RecursionDesired) << std::endl;
-        os << "Truncation: " << static_cast<bool>(header.Truncation) << std::endl;
-        os << "Authoritative: " << static_cast<bool>(header.Authoritative) << std::endl;
-        os << "Opcode: " << header.Opcode << std::endl;
-        os << "IsResponseCode: " << static_cast<bool>(header.IsResponseCode) << std::endl;
-        os << "ResponseCode: " << header.ResponseCode << std::endl;
-        os << "CheckingDisabled: " << static_cast<bool>(header.CheckingDisabled) << std::endl;
-        os << "Reserved: " << static_cast<bool>(header.Reserved) << std::endl;
-        os << "RecursionAvailable: " << static_cast<bool>(header.RecursionAvailable) << std::endl;
-        os << "Count question: " << SwapEndian<uint16_t>(header.CountQuestion) << std::endl;
-        os << "Count answer: " << SwapEndian<uint16_t>(header.CountAnswer) << std::endl;
-        os << "Count authority: " << SwapEndian<uint16_t>(header.CountAuthority) << std::endl;
-        os << "Count additional: " << SwapEndian<uint16_t>(header.CountAdditional) << std::endl;
+        fmt::print(os, "ID: {} \n", SwapEndian<uint16_t>(header.ID));
+        fmt::print(os, "RecursionDesired: {} \n", static_cast<bool>(header.RecursionDesired));
+        fmt::print(os, "Truncation: {} \n", static_cast<bool>(header.Truncation));
+        fmt::print(os, "Authoritative: {} \n", static_cast<bool>(header.Authoritative));
+        fmt::print(os, "Opcode: {} \n", header.Opcode);
+        fmt::print(os, "IsResponseCode: {} \n", static_cast<bool>(header.IsResponseCode));
+        fmt::print(os, "ResponseCode: {} \n", header.ResponseCode);
+        fmt::print(os, "CheckingDisabled: {} \n", static_cast<bool>(header.CheckingDisabled));
+        fmt::print(os, "Reserved: {} \n", static_cast<bool>(header.Reserved));
+        fmt::print(os, "RecursionAvailable: {} \n", static_cast<bool>(header.RecursionAvailable));
+        fmt::print(os, "Count question: {} \n", SwapEndian<uint16_t>(header.CountQuestion));
+        fmt::print(os, "Count answer: {} \n",   SwapEndian<uint16_t>(header.CountAnswer));
+        fmt::print(os, "Count authority: {} \n", SwapEndian<uint16_t>(header.CountAuthority));
+        fmt::print(os, "Count additional: {} \n", SwapEndian<uint16_t>(header.CountAdditional));
         return os;
     }
 
     inline std::ostream& operator<<(std::ostream& os, Answer const& answer) {
-        os << "Type: " << SwapEndian<uint16_t>(answer.Type) << std::endl;
-        os << "Class: " << SwapEndian<uint16_t>(answer.Class) << std::endl;
-        os << "TTL: " << SwapEndian<uint32_t>(answer.TTL) << std::endl;
-        os << "Data size: " << SwapEndian<uint16_t>(answer.DataLenght) << std::endl;
+        fmt::print(os, "Type: {} \n", SwapEndian<uint16_t>(answer.Type));
+        fmt::print(os, "Class: {} \n", SwapEndian<uint16_t>(answer.Class));
+        fmt::print(os, "TTL: {} \n", SwapEndian<uint16_t>(answer.TTL));
+        fmt::print(os, "Data size: {} \n", SwapEndian<uint16_t>(answer.DataLenght));  
         return os;
     }
 
     inline std::ostream& operator<<(std::ostream& os, Question const& question) {
-        os << "Type: " << SwapEndian<uint16_t>(question.Type) << std::endl;
-        os << "Class: " << SwapEndian<uint16_t>(question.Class) << std::endl;
+        fmt::print(os, "Type: {} \n", SwapEndian<uint16_t>(question.Type));
+        fmt::print(os, "Class: {} \n", SwapEndian<uint16_t>(question.Class));
         return os;
     }
 
     inline std::ostream& operator<<(std::ostream& os, Query const& query) {
-        os << "Name: " << query.Name.c_str() << std::endl;
-        os << query.Question << std::endl;
+        fmt::print(os, "Name: {} \n", query.Name.c_str());
+        fmt::print(os, "{} \n", query.Question);
         return os;
     }
 
     inline std::ostream& operator<<(std::ostream& os, ResourceRecord const& record) {
-        os << "Name: " << record.Name.c_str() << std::endl;
-        os << record.Answer << std::endl;
-        os << "Data: " << record.Data.c_str() << std::endl;
+        fmt::print(os, "Name: {} \n", record.Name.c_str());
+        fmt::print(os, "{} \n", record.Answer);
+        fmt::print(os, "-------------- \n");
+        fmt::print(os, "{} \n", record.Data.c_str());
         return os;
     }
 
     inline std::ostream& operator<<(std::ostream& os, Package const& package) {
-        os << "DNS package:" << std::endl;
-        os << "Header: " << std::endl;
-        os << package.Header;
+        fmt::print(os, "DNS package: \n");
+
+        fmt::print(os, "Header: \n");
+        fmt::print(os, "{} \n", package.Header);
 
         for (auto const& e : package.Questions) {
-            os << "--------------" << std::endl;
-            os << "Questions: " << std::endl;
-            os << e << std::endl;
+            fmt::print(os, "-------------- \n");
+            fmt::print(os, "Questions: \n");
+            fmt::print(os, "{} \n", e);
         }
 
         for (auto const& e : package.Answers) {
-            os << "--------------" << std::endl;
-            os << "Answers: " << std::endl;
-            os << e << std::endl;
+            fmt::print(os, "-------------- \n");
+            fmt::print(os, "Answers: \n");
+            fmt::print(os, "{} \n", e);
         }
 
         for (auto const& e : package.Authoritys) {
-            os << "--------------" << std::endl;
-            os << "Authoritys: " << std::endl;
-            os << e << std::endl;
+            fmt::print(os, "-------------- \n");
+            fmt::print(os, "Authoritys: \n");
+            fmt::print(os, "{} \n", e);
         }
 
         for (auto const& e : package.Additional) {
-            os << "--------------" << std::endl;
-            os << "Additional: " << std::endl;
-            os << e << std::endl;
+            fmt::print(os, "-------------- \n");
+            fmt::print(os, "Additional: \n");
+            fmt::print(os, "{} \n", e);
         }
         return os;
     }
 
     template <typename T>
     [[nodiscard]] auto SwapEndian(T source) noexcept -> T {
-        static_assert (CHAR_BIT == 8, "CHAR_BIT != 8");
-        union {
-            uint8_t bufferUnwrap[sizeof(T)];
-            T       bufferWrap = {};
-        } dest;
-        for (size_t index = 0; index < sizeof(T); index++)
-            dest.bufferUnwrap[index] = reinterpret_cast<uint8_t*>(&source)[sizeof(T) - index - 1];
-        return dest.bufferWrap;
+       return boost::endian::big_to_native(source);
     }
 
     [[nodiscard]] inline auto ParseName(const uint8_t* pData) noexcept -> std::string {
@@ -249,7 +246,7 @@ namespace DNS {
         return std::string(pData, pData + size + 2);
     }
 
-    [[nodiscard]] inline auto CreatePackageFromBuffer(std::vector<uint8_t> const& buffer) -> Package {
+    [[nodiscard]] inline auto CreatePackageFromBuffer(std::span<const uint8_t> buffer) -> Package {
         size_t offset = 0;
         Package package = {};
         std::memcpy(&package.Header, buffer.data(), sizeof(DNS::Header));
