@@ -13,7 +13,7 @@
 
 namespace DNS {
 
-    constexpr std::size_t PACKAGE_SIZE = 1024;
+    constexpr std::size_t PACKAGE_SIZE = 2048;
 
     using Name = std::string;
     using Data = std::string;

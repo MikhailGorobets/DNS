@@ -5,6 +5,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/signal_set.hpp>
+#include <boost/asio/thread_pool.hpp>
 
 #include <unordered_map>
 #include <span>
@@ -25,6 +26,9 @@ namespace NET {
 
     using IOContext = boost::asio::io_context;
     using SignalSet = boost::asio::signal_set;
+    
+    using ShutdownType = boost::asio::socket_base::shutdown_type;
+    using Exeception   = boost::system::system_error;
 
     template<typename... Args>
     auto Buffer(Args&&... args) -> decltype(boost::asio::buffer(std::forward<Args>(args)...)) {
@@ -35,105 +39,13 @@ namespace NET {
     auto Address(Args&&... args) -> decltype(boost::asio::ip::make_address_v4(std::forward<Args>(args)...)) {
         return boost::asio::ip::make_address_v4(std::forward<Args>(args)...);
     }
+
+    template<typename... Args>
+    auto Post(Args&&... args) -> decltype(boost::asio::post(std::forward<Args>(args)...)) {
+        return boost::asio::post(std::forward<Args>(args)...);
+    }
 }
 
-template<typename T>
-class ThreadSafeQueue final {
-public:
-    ThreadSafeQueue() = default;
-
-    auto Push(T&& value) -> void {
-        std::unique_lock<std::mutex> lock(m_Mutex);
-        m_Queue.push(value);
-        lock.unlock();
-        m_Condition.notify_one();
-    }
-
-    auto Push(const T& value) -> void {
-        std::unique_lock<std::mutex> lock(m_Mutex);
-        m_Queue.push(value);
-        lock.unlock();
-        m_Condition.notify_one();
-    }
-
-    auto Pop() -> std::optional<T> {
-        std::unique_lock<std::mutex> lock(m_Mutex);
-        m_Condition.wait(lock, [this]() { return !m_Queue.empty() || !m_IsValid; });
-        if (!m_IsValid)
-            return std::nullopt;
-
-        auto value = std::move(m_Queue.front());
-        m_Queue.pop();
-        return value;
-    }
-
-    auto IsEmpty() const -> bool {
-        std::unique_lock<std::mutex> lock(m_Mutex);
-        return m_Queue.empty();
-    }
-
-    auto Invalidate() -> void {
-        m_IsValid = false;
-        m_Condition.notify_all();
-    }
-
-private:
-    std::atomic_bool        m_IsValid = {true};
-    std::queue<T>           m_Queue = {};
-    mutable std::mutex      m_Mutex = {};
-    std::condition_variable m_Condition = {};
-};
-
-class ThreadPool final {
-public:
-    using Task = std::function<void()>;
-    using TaskQueue = ThreadSafeQueue<std::function<void()>>;
-    using ListThread = std::vector<std::thread>;
-public:
-    ThreadPool(std::optional<uint32_t> threadCount = std::nullopt) {
-        uint32_t hardwareThreads = std::thread::hardware_concurrency();
-        for (size_t index = 0; index < threadCount.value_or(hardwareThreads); index++) {
-            m_Threads.emplace_back([this]() {
-                while (true) {
-                    auto packagedTask = m_Queue.Pop();
-                    if (!packagedTask.has_value())
-                        break;
-                    m_ActiveThreads++;
-                    (*packagedTask)();
-                    m_ActiveThreads--;
-                    m_ThreadsCompleteCondition.notify_all();
-                }
-            });
-        }
-    }
-
-    ~ThreadPool() {
-        m_Queue.Invalidate();
-        for (auto& thread : m_Threads)
-            thread.join();
-    }
-
-    auto AddTask(Task&& task) -> void {
-        m_Queue.Push(task);
-    }
-
-    auto Wait() -> void {
-        std::unique_lock<std::mutex> lock(m_ThreadsCompleteMutex);
-        m_ThreadsCompleteCondition.wait(lock, [this] { return !m_ActiveThreads && m_Queue.IsEmpty(); });
-    }
-
-    auto Abort() -> void {
-        m_Queue.Invalidate();
-        Wait();
-    }
-
-private:
-    ListThread m_Threads = {};
-    TaskQueue  m_Queue = {};
-    std::atomic<uint32_t>   m_ActiveThreads = {};
-    std::mutex              m_ThreadsCompleteMutex = {};
-    std::condition_variable m_ThreadsCompleteCondition = {};
-};
 
 class DNSCache {
 public:
@@ -159,7 +71,7 @@ public:
     DNSServer(int argc, char* argv[]) {
         m_Cache = std::make_unique<DNSCache>();
         m_SignalSet = std::make_unique<NET::SignalSet>(m_Service, SIGINT, SIGTERM);
-        m_Socket = std::make_unique<NET::SocketUDP>(m_Service, NET::UDPoint(NET::UDP::v4(), 53));
+        m_Socket = std::make_unique<NET::SocketUDP>(m_Service, NET::UDPoint(NET::UDP::v4(), 57));
     #ifdef _WIN32
         struct IOControlCommand {
             uint32_t value = {};
@@ -172,68 +84,72 @@ public:
     }
 
     auto Run() -> void {
-        fmt::print("Application Run: \n");
-        fmt::print("IP:   {}\n", m_Socket->local_endpoint().address().to_string());
-        fmt::print("Port: {}\n", m_Socket->local_endpoint().port());
-
+        fmt::print("DNS Server: Run \n");
+        fmt::print("DNS Server: IP: {}, Port: {} \n", m_Socket->local_endpoint().address().to_string(), m_Socket->local_endpoint().port());
+   
         m_IsApplicationRun = true;
-        m_Dispather.AddTask([this]() {
+        boost::asio::post(m_Dispather, [this]() {
             m_SignalSet->async_wait([&](auto const& error, int32_t signal) {
-                m_IsApplicationRun = false;
-                fmt::print("Application Shutdown: \n");
+                m_IsApplicationRun = false;    
+               
+             //   m_Socket->shutdown(NET::ShutdownType::shutdown_both);          
+                m_Socket->close();        
+                fmt::print("DNS Server: Shutdown \n");
             });
             m_Service.run();
         });
-        m_Dispather.AddTask([this]() {
-            while (m_IsApplicationRun) {
-                NET::UDPoint sender;
-                std::vector<uint8_t> buffer(DNS::PACKAGE_SIZE);
-                size_t size = m_Socket->receive_from(NET::Buffer(buffer), sender);
-                m_Connections.Push(std::make_tuple(std::move(sender), std::move(buffer)));
-            }
-        });
-        m_Dispather.AddTask([this]() {
-            while (m_IsApplicationRun) {
-                auto connection = m_Connections.Pop();
-                m_Dispather.AddTask([this, connection = std::move(connection)]() mutable {
-                    auto& [point, buffer] = *connection;
 
-                    DNS::Package packet = DNS::CreatePackageFromBuffer(buffer);
-                    auto cacheValue = m_Cache->Get(packet.Questions.at(0).Name);
+        //The send_to and receive_from functions must be thread safe up to a certain size(65536)
+        NET::Post(m_Dispather, ([this]() {
+            while (m_IsApplicationRun) {
+                try {
+                    NET::UDPoint point;
+                    std::vector<uint8_t> buffer(DNS::PACKAGE_SIZE);
+                    m_Socket->receive_from(NET::Buffer(buffer), point);
+                    boost::asio::post(m_Dispather, [this, point = std::move(point), buffer = std::move(buffer)]() mutable {
+                        try {
+                            DNS::Package packet = DNS::CreatePackageFromBuffer(buffer);
+                            auto cacheValue = m_Cache->Get(packet.Questions.at(0).Name);
 
-                    if (cacheValue.has_value()) {
-                        DNS::Package packetCached = cacheValue.value();
-                        packetCached.Header.ID = packet.Header.ID;
-                        m_Socket->send_to(NET::Buffer(DNS::CreateBufferFromPackage(packetCached)), point);
-                    } else {
-                        NET::SocketUDP socket = {m_Service, NET::UDPoint(NET::UDP::v4(), 0)};
-                        socket.send_to(NET::Buffer(buffer), NET::UDPoint(NET::Address("5.3.3.3"), 53));
-                        size_t size = socket.receive(NET::Buffer(buffer));
-                        m_Socket->send_to(NET::Buffer(buffer, size), point);
-                        m_Cache->Add(packet.Questions[0].Name, DNS::CreatePackageFromBuffer(buffer));
-                    }
-                });
+                            if (cacheValue.has_value()) {
+                                DNS::Package packetCached = cacheValue.value();
+                                packetCached.Header.ID = packet.Header.ID;
+                                m_Socket->send_to(NET::Buffer(DNS::CreateBufferFromPackage(packetCached)), point);
+
+                            } else {
+                                NET::SocketUDP socket = {m_Service, NET::UDPoint(NET::UDP::v4(), 0)};
+                                socket.send_to(NET::Buffer(buffer), NET::UDPoint(NET::Address("5.3.3.3"), 53));
+                                size_t size = socket.receive(NET::Buffer(buffer));
+                                m_Socket->send_to(NET::Buffer(buffer, size), point);
+                                //   m_Cache->Add(packet.Questions[0].Name, DNS::CreatePackageFromBuffer(buffer));
+                            }
+                        } catch (NET::Exeception& error) {
+                            if (error.code() != boost::asio::error::interrupted)
+                                fmt::print("Error: {} \n", error.what());
+                        }
+                    });
+
+                } catch(NET::Exeception& error) {             
+                    if (error.code() != boost::asio::error::interrupted) 
+                        fmt::print("Error: {} \n", error.what());                                 
+                }  
             }
-        });
-        m_Dispather.Wait();
+        }));
+        m_Dispather.join();
     }
 
 private:
-    using ConnectionContext = std::tuple<NET::UDPoint, std::vector<uint8_t>>;
-    using ConnectionList = ThreadSafeQueue<ConnectionContext>;
-
     using PtrDNSCache = std::unique_ptr<DNSCache>;
     using PtrSocketUDP = std::unique_ptr<NET::SocketUDP>;
     using PtrSignalSet = std::unique_ptr<NET::SignalSet>;
+    using ThreadPool = boost::asio::thread_pool;
 
     std::atomic_bool m_IsApplicationRun = {};
-    ConnectionList   m_Connections = {};
     ThreadPool       m_Dispather = {};
     PtrDNSCache      m_Cache = {};
     NET::IOContext   m_Service = {};
     PtrSignalSet     m_SignalSet = {};
     PtrSocketUDP     m_Socket = {};
-    std::mutex       m_MutexSocket = {};
 };
 
 int main(int argc, char* argv[]) {
