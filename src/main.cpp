@@ -30,6 +30,9 @@ namespace NET {
     using ShutdownType = boost::asio::socket_base::shutdown_type;
     using Exeception   = boost::system::system_error;
 
+    using Error     = boost::system::error_code;
+    using ErrorType = boost::asio::error::basic_errors;
+
     template<typename... Args>
     auto Buffer(Args&&... args) -> decltype(boost::asio::buffer(std::forward<Args>(args)...)) {
         return boost::asio::buffer(std::forward<Args>(args)...);
@@ -72,6 +75,8 @@ public:
         m_Cache = std::make_unique<DNSCache>();
         m_SignalSet = std::make_unique<NET::SignalSet>(m_Service, SIGINT, SIGTERM);
         m_Socket = std::make_unique<NET::SocketUDP>(m_Service, NET::UDPoint(NET::UDP::v4(), 57));
+        m_Socket->set_option(boost::asio::detail::socket_option::integer<SOL_SOCKET, SO_RCVTIMEO>{ 200 });
+
     #ifdef _WIN32
         struct IOControlCommand {
             uint32_t value = {};
@@ -88,12 +93,10 @@ public:
         fmt::print("DNS Server: IP: {}, Port: {} \n", m_Socket->local_endpoint().address().to_string(), m_Socket->local_endpoint().port());
    
         m_IsApplicationRun = true;
-        boost::asio::post(m_Dispather, [this]() {
+        NET::Post(m_Dispather, [this]() {
             m_SignalSet->async_wait([&](auto const& error, int32_t signal) {
-                m_IsApplicationRun = false;    
-               
-             //   m_Socket->shutdown(NET::ShutdownType::shutdown_both);          
-                m_Socket->close();        
+                m_IsApplicationRun.store(false);    
+                m_Dispather.stop();    
                 fmt::print("DNS Server: Shutdown \n");
             });
             m_Service.run();
@@ -101,38 +104,40 @@ public:
 
         //The send_to and receive_from functions must be thread safe up to a certain size(65536)
         NET::Post(m_Dispather, ([this]() {
-            while (m_IsApplicationRun) {
-                try {
-                    NET::UDPoint point;
-                    std::vector<uint8_t> buffer(DNS::PACKAGE_SIZE);
-                    m_Socket->receive_from(NET::Buffer(buffer), point);
-                    boost::asio::post(m_Dispather, [this, point = std::move(point), buffer = std::move(buffer)]() mutable {
-                        try {
-                            DNS::Package packet = DNS::CreatePackageFromBuffer(buffer);
-                            auto cacheValue = m_Cache->Get(packet.Questions.at(0).Name);
+            while (m_IsApplicationRun.load()) {
+       
+                NET::UDPoint point;
+                std::vector<uint8_t> buffer(DNS::PACKAGE_SIZE);   
 
-                            if (cacheValue.has_value()) {
-                                DNS::Package packetCached = cacheValue.value();
-                                packetCached.Header.ID = packet.Header.ID;
-                                m_Socket->send_to(NET::Buffer(DNS::CreateBufferFromPackage(packetCached)), point);
+                NET::Error result;     
+                m_Socket->receive_from(NET::Buffer(buffer), point, {}, result);
+                switch (result.value()) {
+                    case NET::ErrorType {}:
+                        break;
+                    case NET::ErrorType::timed_out:
+                        continue;               
+                    default:
+                        fmt::print("Error: {} \n", result.message());
+                        continue;
+                }
 
-                            } else {
-                                NET::SocketUDP socket = {m_Service, NET::UDPoint(NET::UDP::v4(), 0)};
-                                socket.send_to(NET::Buffer(buffer), NET::UDPoint(NET::Address("5.3.3.3"), 53));
-                                size_t size = socket.receive(NET::Buffer(buffer));
-                                m_Socket->send_to(NET::Buffer(buffer, size), point);
-                                //   m_Cache->Add(packet.Questions[0].Name, DNS::CreatePackageFromBuffer(buffer));
-                            }
-                        } catch (NET::Exeception& error) {
-                            if (error.code() != boost::asio::error::interrupted)
-                                fmt::print("Error: {} \n", error.what());
-                        }
-                    });
+                NET::Post(m_Dispather, [this, point = std::move(point), buffer = std::move(buffer)]() mutable {
+                    DNS::Package packet = DNS::CreatePackageFromBuffer(buffer);
+                    auto cacheValue = m_Cache->Get(packet.Questions.at(0).Name);
 
-                } catch(NET::Exeception& error) {             
-                    if (error.code() != boost::asio::error::interrupted) 
-                        fmt::print("Error: {} \n", error.what());                                 
-                }  
+                    if (cacheValue.has_value()) {
+                        DNS::Package packetCached = cacheValue.value();
+                        packetCached.Header.ID = packet.Header.ID;
+                        m_Socket->send_to(NET::Buffer(DNS::CreateBufferFromPackage(packetCached)), point);
+
+                    } else {
+                        NET::SocketUDP socket = {m_Service, NET::UDPoint(NET::UDP::v4(), 0)};
+                        socket.send_to(NET::Buffer(buffer), NET::UDPoint(NET::Address("5.3.3.3"), 53));
+                        size_t size = socket.receive(NET::Buffer(buffer));
+                        m_Socket->send_to(NET::Buffer(buffer, size), point);
+                        m_Cache->Add(packet.Questions[0].Name, DNS::CreatePackageFromBuffer(buffer));
+                    }
+                });
             }
         }));
         m_Dispather.join();
