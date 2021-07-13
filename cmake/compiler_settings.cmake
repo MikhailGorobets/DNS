@@ -4,7 +4,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 
 if(WIN32)
-   
    add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/MP>)
    set(PLATFORM_WIN32 TRUE CACHE INTERNAL "Target platform: Win32")
    message("Target platform: Win32. SDK Version: " ${CMAKE_SYSTEM_VERSION})

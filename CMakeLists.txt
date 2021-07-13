@@ -10,6 +10,7 @@ include(cmake_settings)
 include(compiler_settings)
 
 include(3rd-party/fmt)
+include(3rd-party/argparse)
 
 set(Boost_USE_MULTITHREADED ON)  
 set(Boost_USE_STATIC_LIBS ON)
@@ -23,19 +24,21 @@ endif()
 set(INCLUDE 
 	include/dns/dns.hpp
 	include/dns/dns_cache.hpp
-	include/dns/server.h
+	include/dns/dns_server.hpp
 )
 
 set(SOURCE 
-	src/main.cpp
-	src/server.cpp
+    src/dns.cpp
+    src/dns_cache.cpp
+    src/dns_server.cpp
+    src/main.cpp
 )
 
 source_group("include" FILES ${INCLUDE})
 source_group("source" FILES  ${SOURCE})
 
 add_executable(DNS ${INCLUDE} ${SOURCE})
-target_link_libraries(DNS PRIVATE Boost::filesystem Boost::serialization Boost::date_time fmt)
+target_link_libraries(DNS PRIVATE Boost::filesystem Boost::serialization Boost::date_time fmt argparse)
 target_include_directories(DNS PRIVATE "include")
 
 set_target_properties(DNS PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_DIRECTORY}")
