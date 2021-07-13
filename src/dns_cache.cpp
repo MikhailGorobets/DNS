@@ -15,9 +15,9 @@ auto DNSCache::Get(std::string const& name) const -> std::optional<DNS::Package>
 auto DNSCache::RemoveTimeoutPackages(uint32_t seconds) -> void {
     std::unique_lock lock(m_MutexCache);
     auto Predicate = [seconds](DNS::ResourceRecord& record) -> bool {
-        if (!std::in_range<uint32_t>(record.Answer.TTL - seconds))
+        if (!std::in_range<uint32_t>(DNS::SwapEndian(record.Answer.TTL) - seconds))
             return true;
-        record.Answer.TTL -= seconds;
+        record.Answer.TTL = DNS::SwapEndian((DNS::SwapEndian(record.Answer.TTL) - seconds));
         return false;
     };
 

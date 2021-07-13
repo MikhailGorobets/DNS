@@ -1,4 +1,5 @@
 #include <dns/dns_server.hpp>
+#include <fmt/printf.h>
 
  DNSServer::DNSServer(int argc, char* argv[]) {
     m_Cache = std::make_unique<DNSCache>();

@@ -3,9 +3,9 @@
 #include <boost/archive/xml_iarchive.hpp>
 #include <boost/archive/xml_oarchive.hpp>
 #include <boost/endian.hpp>
-#include <fmt/printf.h>
-#include <fmt/ostream.h>
+#include <ostream>
 #include <span>
+
 
 namespace DNS {
 
@@ -78,8 +78,15 @@ namespace DNS {
     };
 
     template <typename T>
-    auto SwapEndian(T value) noexcept -> T {
-        return boost::endian::big_to_native(value);
+    [[nodiscard]] auto SwapEndian(T source) noexcept -> T {
+        static_assert (CHAR_BIT == 8, "CHAR_BIT != 8");
+        union {
+            uint8_t bufferUnwrap[sizeof(T)];
+            T       bufferWrap = {};
+        } dest;
+        for (size_t index = 0; index < sizeof(T); index++)
+            dest.bufferUnwrap[index] = reinterpret_cast<uint8_t*>(&source)[sizeof(T) - index - 1];
+        return dest.bufferWrap;
     }
 
     auto ParseName(const uint8_t* pData) noexcept -> std::string;

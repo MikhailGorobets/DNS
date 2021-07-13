@@ -1,6 +1,11 @@
 #include <dns/dns.hpp>
+#include <fmt/ostream.h>
+#include <fmt/printf.h>
+
 
 namespace DNS {
+
+
     auto ParseName(const uint8_t* pData) noexcept -> std::string {
         if (pData[0] == 0xC0) //Comression name
             return std::string(pData, pData + 2);
