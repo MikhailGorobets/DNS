@@ -2,7 +2,6 @@
 
 #include <boost/archive/xml_iarchive.hpp>
 #include <boost/archive/xml_oarchive.hpp>
-#include <boost/endian.hpp>
 #include <ostream>
 #include <span>
 
